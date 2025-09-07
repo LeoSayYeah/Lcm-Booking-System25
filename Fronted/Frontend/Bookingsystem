@@ -1,0 +1,288 @@
+lcm-full-mono/
+├── README.md
+├── render.yaml
+├── frontend/
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── tailwind.config.js
+│   ├── postcss.config.js
+│   ├── .env.example
+│   ├── index.html
+│   ├── public/
+│   │   └── logo.png
+│   └── src/
+│       ├── main.jsx
+│       ├── index.css
+│       └── App.jsx
+└── backend/
+    ├── requirements.txt
+    ├── Procfile
+    └── app/
+        ├── __init__.py
+        ├── models.py
+        └── app.py# LCM Oven Cleaning — Full Monorepo (Frontend + Backend)
+
+Deploy both with a single Render **Blueprint**.
+
+## Steps
+1) Upload everything in this folder to a new GitHub repo.
+2) Render → New → **Blueprint** → pick that repo.
+3) After both services are created:
+   - In **lcm-frontend → Environment**, set `VITE_API_URL` to the backend URL (`https://lcm-backend.onrender.com` style) and redeploy.
+   - (Optional) In **lcm-backend → Environment**, add `DATABASE_URL` for Postgres (uses SQLite by default).
+
+Bookings are allowed only Mon–Fri **08:15–14:00** and from **2025-08-18** onward.services:
+- type: static_site
+  name: lcm-frontend
+  env: static
+  buildCommand: cd frontend && npm ci && npm run build
+  staticPublishPath: frontend/dist
+
+- type: web
+  name: lcm-backend
+  env: python
+  plan: free
+  repoPath: backend
+  buildCommand: pip install -r requirements.txt
+  startCommand: gunicorn app.app:app{
+  "name": "lcm-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.0",
+    "autoprefixer": "^10.4.17",
+    "postcss": "^8.4.33",
+    "tailwindcss": "^3.4.1",
+    "vite": "^5.0.0"
+  }
+}import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+export default defineConfig({ plugins:[react()] })/** @type {import('tailwindcss').Config} */
+export default { content:["./index.html","./src/**/*.{js,jsx,ts,tsx}"], theme:{ extend:{} }, plugins:[] }export default { plugins: { tailwindcss: {}, autoprefixer: {} } }VITE_API_URL=https://YOUR-BACKEND.onrender.com<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LCM Oven Cleaning</title>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+</html>import React from 'react'
+import { createRoot } from 'react-dom/client'
+import App from './App.jsx'
+import './index.css'
+createRoot(document.getElementById('root')).render(<App />)@tailwind base;
+@tailwind components;
+@tailwind utilities;
+:root { background: #f8fafc; color-scheme: light; }import React, { useEffect, useState } from 'react'
+const API = import.meta.env.VITE_API_URL || ''
+
+export default function App(){
+  const [services,setServices]=useState([])
+  const [form,setForm]=useState({
+    customer_name:'', email:'', phone:'', address:'', postcode:'',
+    date:'', start_time:'', service_ids:[], notes:''
+  })
+  const [msg,setMsg]=useState('')
+
+  useEffect(()=>{ (async()=>{
+    try{ const r=await fetch(API+'/services'); if(r.ok){ setServices(await r.json()) } }catch{}
+  })() },[])
+
+  function toggleService(id){
+    setForm(f=>({...f, service_ids: f.service_ids.includes(id) ? f.service_ids.filter(x=>x!==id) : f.service_ids.concat(id)}))
+  }
+
+  async function submit(e){
+    e.preventDefault(); setMsg('')
+    try{
+      const r=await fetch(API+'/bookings',{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(form)
+      })
+      const d=await r.json()
+      setMsg(r.ok ? 'Booked! Check your email.' : (d.error || 'Error'))
+      if(r.ok){ setForm({customer_name:'', email:'', phone:'', address:'', postcode:'', date:'', start_time:'', service_ids:[], notes:''}) }
+    }catch{ setMsg('Server error') }
+  }
+
+  return (<div className="max-w-2xl mx-auto p-4">
+    <header className="flex items-center gap-3 mb-4">
+      <img src="/logo.png" className="w-10 h-10 rounded-full" />
+      <div>
+        <div className="font-bold">LCM Oven Cleaning</div>
+        <div className="text-xs text-slate-600">Mon–Fri 8:15–14:00 • Bookings from 18 Aug 2025</div>
+      </div>
+    </header>
+
+    <h2 className="text-xl font-semibold mb-2">Book a Clean</h2>
+    <form onSubmit={submit} className="space-y-2 bg-white border rounded-xl p-4 shadow">
+      <input required placeholder="Full name" className="border rounded p-2 w-full" value={form.customer_name} onChange={e=>setForm({...form,customer_name:e.target.value})}/>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <input placeholder="Email (optional)" className="border rounded p-2 w-full" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/>
+        <input placeholder="Phone (optional)" className="border rounded p-2 w-full" value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})}/>
+      </div>
+      <input required placeholder="Address" className="border rounded p-2 w-full" value={form.address} onChange={e=>setForm({...form,address:e.target.value})}/>
+      <input required placeholder="Postcode (e.g., E14 5AB)" className="border rounded p-2 w-full" value={form.postcode} onChange={e=>setForm({...form,postcode:e.target.value.toUpperCase()})}/>
+      <div className="grid grid-cols-2 gap-2">
+        <input required type="date" className="border rounded p-2 w-full" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/>
+        <input required type="time" className="border rounded p-2 w-full" value={form.start_time} onChange={e=>setForm({...form,start_time:e.target.value})}/>
+      </div>
+      <div>
+        <div className="text-sm font-semibold mb-1">Select services</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {services.map(s=>(
+            <label key={s.id} className="flex items-center gap-2 border rounded p-2">
+              <input type="checkbox" checked={form.service_ids.includes(s.id)} onChange={()=>toggleService(s.id)}/>
+              <span className="flex-1">{s.name}</span>
+              <span className="text-xs font-bold">£{(s.price_pence/100).toFixed(2)}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+      <textarea placeholder="Notes (optional)" className="border rounded p-2 w-full" value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/>
+      <button className="bg-yellow-500 px-4 py-2 rounded font-semibold">Book</button>
+      <div className="text-sm">{msg}</div>
+    </form>
+  </div>)
+}Flask==3.0.2
+Flask-Cors==4.0.0
+SQLAlchemy==2.0.30
+psycopg2-binary==2.9.9
+python-dotenv==1.0.1
+pgeocode==0.4.1
+gunicorn==21.2.0web: gunicorn app.app:app# empty filefrom datetime import datetime
+from sqlalchemy import Column, Integer, String, Date, Time, DateTime
+from sqlalchemy.orm import declarative_base
+Base = declarative_base()
+
+class Service(Base):
+    __tablename__ = 'services'
+    id = Column(Integer, primary_key=True)
+    category = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    price = Column(Integer, nullable=False)  # pence
+    duration_min = Column(Integer, nullable=False)
+
+class Booking(Base):
+    __tablename__ = 'bookings'
+    id = Column(Integer, primary_key=True)
+    customer_name = Column(String, nullable=False)
+    email = Column(String)
+    phone = Column(String)
+    address = Column(String, nullable=False)
+    postcode = Column(String, nullable=False)
+    date = Column(Date, nullable=False)
+    start_time = Column(Time, nullable=False)
+    end_time = Column(Time, nullable=False)
+    notes = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    total_price_pence = Column(Integer, default=0)
+    total_duration_min = Column(Integer, default=0)import os
+from datetime import datetime, date, time, timedelta
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from sqlalchemy import create_engine, select, func
+from sqlalchemy.orm import Session
+from .models import Base, Service, Booking
+
+WORK_START = time(8, 15)
+WORK_END = time(14, 0)
+LAUNCH_DATE = date(2025, 8, 18)
+
+DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///lcm.db')
+engine = create_engine(DATABASE_URL, echo=False, future=True)
+Base.metadata.create_all(engine)
+
+# Seed services if empty
+def seed():
+    with Session(engine) as s:
+        cnt = s.scalar(select(func.count(Service.id)))
+        if cnt and cnt > 0: return
+        data = [
+            ('Oven Cleaning','Single oven clean', 5000, 90),
+            ('Oven Cleaning','Oven and grill', 7500, 120),
+            ('Oven Cleaning','Side by side single ovens', 9000, 120),
+            ('Oven Cleaning','Range oven', 12500, 150),
+            ('Oven Cleaning','Ceramic hob', 1000, 20),
+            ('Oven Cleaning','Gas hob 4 burner', 2000, 30),
+            ('Oven Cleaning','Extractor', 2000, 30),
+            ('Carpet Cleaning','1 carpet', 5000, 60),
+            ('Carpet Cleaning','2 carpets', 7000, 90),
+            ('Carpet Cleaning','3 carpets', 9000, 90),
+            ('Carpet Cleaning','4 carpets', 11000, 120),
+            ('Carpet Cleaning','5 carpets', 12500, 120),
+            ('Carpet Cleaning','Stairs & landing', 5000, 60),
+            ('Carpet Cleaning','Stairs & landing x2', 7500, 90),
+            ('Sofa Cleaning','Arm chair / love chair', 3000, 60),
+            ('Sofa Cleaning','2 seater', 5000, 60),
+            ('Sofa Cleaning','3 seater', 7500, 90),
+            ('Sofa Cleaning','Corner sofa', 10000, 120),
+            ('White Goods','Washing machine service', 3000, 30),
+            ('White Goods','Dishwasher service', 3000, 30),
+            ('White Goods','Fridge freezer clean', 3000, 30),
+            ('White Goods','American fridge freezer clean', 5000, 60),
+        ]
+        s.add_all([Service(category=c, name=n, price=p, duration_min=d) for c,n,p,d in data])
+        s.commit()
+seed()
+
+app = Flask(__name__); CORS(app)
+
+@app.get('/health')
+def health(): return {'ok': True, 'time': datetime.utcnow().isoformat()}
+
+@app.get('/services')
+def services():
+    with Session(engine) as s:
+        rows = s.scalars(select(Service).order_by(Service.category, Service.id)).all()
+        return jsonify([{'id':r.id,'category':r.category,'name':r.name,'price_pence':r.price,'duration_min':r.duration_min} for r in rows])
+
+def within_hours(start_t, duration_min):
+    dt_start = datetime.combine(date.today(), start_t)
+    dt_end = dt_start + timedelta(minutes=duration_min)
+    return dt_end.time() <= WORK_END, dt_end.time()
+
+@app.post('/bookings')
+def create_booking():
+    data = request.get_json() or {}
+    required = ['customer_name','address','postcode','date','start_time','service_ids']
+    if any(not data.get(k) for k in required): return jsonify({'error':'Missing required fields'}), 400
+    try:
+        d = datetime.strptime(data['date'],'%Y-%m-%d').date()
+        hh,mm = map(int, data['start_time'].split(':'))
+        st = time(hh,mm)
+    except Exception:
+        return jsonify({'error':'Invalid date or time'}), 400
+    if d.weekday() > 4: return jsonify({'error':'Bookings are Monday to Friday only'}), 400
+    if d < LAUNCH_DATE: return jsonify({'error': f'Bookings start from {LAUNCH_DATE.isoformat()}'}), 400
+
+    with Session(engine) as s:
+        ids = data.get('service_ids',[])
+        if not ids: return jsonify({'error':'No services selected'}), 400
+        rows = s.scalars(select(Service).where(Service.id.in_(ids))).all()
+        if not rows: return jsonify({'error':'No valid services selected'}), 400
+        total_min = sum(r.duration_min for r in rows)
+        total_price = sum(r.price for r in rows)
+        ok, end_t = within_hours(st, total_min)
+        if not ok: return jsonify({'error': f'Job would end after {WORK_END.strftime("%H:%M")}' }), 400
+
+        b = Booking(customer_name=data['customer_name'], email=data.get('email'), phone=data.get('phone'),
+                    address=data['address'], postcode=data['postcode'].upper().strip(), date=d,
+                    start_time=st, end_time=end_t, notes=data.get('notes',''),
+                    total_price_pence=total_price, total_duration_min=total_min)
+        s.add(b); s.commit()
+
+    return jsonify({'ok': True, 'end_time': end_t.strftime('%H:%M'), 'total_minutes': total_min, 'total_price_pence': total_price})
